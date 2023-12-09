@@ -4,3 +4,6 @@
 [submodule "order-service"]
 	path = order-service
 	url = https://github.com/tonghohin/order-service.git
+[submodule "inventory-service"]
+	path = inventory-service
+	url = https://github.com/tonghohin/inventory-service.git
