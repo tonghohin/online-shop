@@ -10,3 +10,6 @@
 [submodule "discovery-server"]
 	path = discovery-server
 	url = https://github.com/tonghohin/discovery-server.git
+[submodule "api-gateway"]
+	path = api-gateway
+	url = https://github.com/tonghohin/api-gateway.git
