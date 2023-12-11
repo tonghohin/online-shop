@@ -13,3 +13,6 @@
 [submodule "api-gateway"]
 	path = api-gateway
 	url = https://github.com/tonghohin/api-gateway.git
+[submodule "notification-service"]
+	path = notification-service
+	url = https://github.com/tonghohin/notification-service.git
