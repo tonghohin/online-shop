@@ -1,5 +1,76 @@
-version: "3"
 services:
+    postgres-order:
+        image: postgres
+        container_name: postgres-order
+        expose:
+            - "5431"
+        ports:
+            - "5431:5431"
+        environment:
+            POSTGRES_DB: order-service
+            POSTGRES_USER: admin
+            POSTGRES_PASSWORD: admin
+            PG_DATA: /data/postgres
+        volumes:
+            - ./postgres-order:/data/postgres
+        command: -p 5431
+        restart: unless-stopped
+
+    postgres-inventory:
+        image: postgres
+        container_name: postgres-inventory
+        ports:
+            - "5432:5432"
+        environment:
+            POSTGRES_DB: inventory-service
+            POSTGRES_USER: admin
+            POSTGRES_PASSWORD: admin
+            PG_DATA: /data/postgres
+        volumes:
+            - ./postgres-inventory:/data/postgres
+        restart: unless-stopped
+
+    adminer:
+        image: adminer
+        container_name: adminer
+        restart: always
+        ports:
+            - 7778:8080
+
+    keycloak-mysql:
+        image: mysql
+        container_name: keycloak-mysql
+        ports:
+            - "3306:3306"
+        environment:
+            MYSQL_DATABASE: keycloak
+            MYSQL_USER: keycloak
+            MYSQL_PASSWORD: password
+            MYSQL_ROOT_PASSWORD: password
+        volumes:
+            - ./keycloak-mysql:/var/lib/mysql
+        restart: unless-stopped
+
+    keycloak:
+        image: quay.io/keycloak/keycloak:23.0.1
+        container_name: keycloak
+        command: ["start-dev", "--import-realm"]
+        ports:
+            - "8080:8080"
+        environment:
+            KEYCLOAK_ADMIN: admin
+            KEYCLOAK_ADMIN_PASSWORD: admin
+            DB_VENDOR: MYSQL
+            DB_ADDR: keycloak-mysql
+            DB_DATABASE: keycloak
+            DB_USER: keycloak
+            DB_PASSWORD: password
+        depends_on:
+            - keycloak-mysql
+        volumes:
+            - ./realms/:/opt/keycloak/data/import/
+        restart: unless-stopped
+
     zookeeper:
         image: confluentinc/cp-zookeeper
         container_name: zookeeper
@@ -22,3 +93,110 @@ services:
             KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
             KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
             KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+    zipkin:
+        image: openzipkin/zipkin
+        container_name: zipkin
+        ports:
+            - "9411:9411"
+
+    api-gateway:
+        image: tonghohin/api-gateway
+        container_name: api-gateway
+        pull_policy: always
+        ports:
+            - "8081:8080"
+        environment:
+            - SPRING_PROFILES_ACTIVE=docker
+        depends_on:
+            - zipkin
+            - discovery-server
+            - keycloak
+        restart: unless-stopped
+
+    discovery-server:
+        image: tonghohin/discovery-server
+        container_name: discovery-server
+        pull_policy: always
+        ports:
+            - "8761:8761"
+        depends_on:
+            - zipkin
+        restart: unless-stopped
+
+    product-service:
+        image: tonghohin/product-service
+        container_name: product-service
+        pull_policy: always
+        environment:
+            - SPRING_PROFILES_ACTIVE=docker
+        depends_on:
+            - discovery-server
+            - api-gateway
+        restart: unless-stopped
+
+    order-service:
+        image: tonghohin/order-service
+        container_name: order-service
+        pull_policy: always
+        environment:
+            - SPRING_PROFILES_ACTIVE=docker
+        depends_on:
+            - zipkin
+            - broker
+            - discovery-server
+            - api-gateway
+            - postgres-order
+        restart: unless-stopped
+
+    inventory-service:
+        image: tonghohin/inventory-service
+        container_name: inventory-service
+        pull_policy: always
+        environment:
+            - SPRING_PROFILES_ACTIVE=docker
+        depends_on:
+            - discovery-server
+            - api-gateway
+            - postgres-inventory
+        restart: unless-stopped
+
+    notification-service:
+        image: tonghohin/notification-service
+        container_name: notification-service
+        pull_policy: always
+        environment:
+            - SPRING_PROFILES_ACTIVE=docker
+        depends_on:
+            - zipkin
+            - broker
+            - discovery-server
+            - api-gateway
+        restart: unless-stopped
+
+    prometheus:
+        image: prom/prometheus
+        container_name: prometheus
+        ports:
+            - "9090:9090"
+        volumes:
+            - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+        depends_on:
+            - order-service
+            - product-service
+            - inventory-service
+            - notification-service
+
+    grafana:
+        image: grafana/grafana-oss
+        container_name: grafana
+        restart: always
+        ports:
+            - "3000:3000"
+        links:
+            - prometheus:prometheus
+        volumes:
+            - ./grafana:/var/lib/grafana
+        environment:
+            - GF_SECURITY_ADMIN_USER=admin
+            - GF_SECURITY_ADMIN_PASSWORD=password
